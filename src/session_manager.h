@@ -30,7 +30,10 @@ class PublishPacket;
  */
 class SessionManager
 {
+    struct event_base *evloop;
+
 public:
+    SessionManager() : evloop(nullptr) {}
 
     /**
      * Accept a new network connection.
@@ -82,4 +85,11 @@ public:
     /** Container of BrokerSessions. */
     std::list<std::unique_ptr<BrokerSession>> sessions;
 
+    void set_event_base(struct event_base *evloop) {
+        this->evloop = evloop;
+    }
+
+    struct event_base *get_event_base() {
+        return evloop;
+    }
 };

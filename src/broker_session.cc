@@ -7,6 +7,19 @@
 
 #include <algorithm>
 
+static void connect_timeout_cb(int sock, short which, void *arg);
+
+BrokerSession::BrokerSession(struct bufferevent *bev, SessionManager &session_manager) : BaseSession(bev),
+                                                                          session_manager(session_manager) {
+    // A CONNECT request should be received after 3 seconds,
+    // after the connection accepted.
+    // Or we will close the connection.
+    struct timeval timeval = {3, 0};
+    struct event_base *evloop = this->session_manager.get_event_base();
+    connect_timeout = evtimer_new(evloop, connect_timeout_cb, this);
+    evtimer_add(connect_timeout, &timeval);
+}
+
 bool BrokerSession::authorize_connection(const ConnectPacket &packet) {
     return true;
 }
@@ -107,8 +120,13 @@ void BrokerSession::handle_connect(const ConnectPacket &packet) {
         }
     }
 
+    // remove the connect timeout timer when connected
+    evtimer_del(connect_timeout);
+
     client_id = packet.client_id;
     clean_session = packet.clean_session();
+
+    // send request to backend
 
     ConnackPacket connack;
 
@@ -246,4 +264,11 @@ void BrokerSession::handle_disconnect(const DisconnectPacket &packet) {
     if (clean_session) {
         session_manager.erase_session(this);
     }
+}
+
+static void connect_timeout_cb(int sock, short which, void *arg) {
+    BrokerSession *session = (BrokerSession *)arg;
+    std::cout << "connect_timeout_cb" << std::endl;
+    session->packet_manager->close_connection();
+    session->session_manager.erase_session(session);
 }

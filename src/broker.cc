@@ -167,6 +167,7 @@ static void listener_cb(struct evconnlistener *listener, evutil_socket_t fd,
         return;
     }
 
+    session_manager.set_event_base(base);
     session_manager.accept_connection(bev);
 }
 

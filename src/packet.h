@@ -100,7 +100,8 @@ public:
     ConnectPacket() {
         type = PacketType::Connect;
         header_flags = 0;
-        protocol_name = "MQIsdp";
+//        protocol_name = "MQIsdp";
+		protocol_name = "MQTT";
         protocol_level = 4;
     }
 

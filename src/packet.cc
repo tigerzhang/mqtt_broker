@@ -39,6 +39,11 @@ ConnectPacket::ConnectPacket(const packet_data_t &packet_data) {
     keep_alive = reader.read_uint16();
     client_id = reader.read_string();
 
+    std::cout << "protocol name: " << protocol_name
+              << std::endl
+              << "protocol level: " << (int)protocol_level
+              << std::endl;
+
     if (client_id.empty()) {
         client_id = generate_client_id();
     }

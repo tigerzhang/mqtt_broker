@@ -66,6 +66,7 @@ public:
 
         SessionManager &session_manager = static_cast<SessionProtocol *>(_this)->session_manager;
 
+        session_manager.set_event_base(evbase);
         session_manager.accept_connection(bev);
     }
 
@@ -92,13 +93,18 @@ public:
 
     std::unique_ptr<SessionType> session;
 
-    void connect_to_broker() {
+    void connect_to_broker(bufferevent_event_cb callback = nullptr) {
 
         struct evdns_base *dns_base;
 
         bufferevent *bev = bufferevent_socket_new(evloop, -1, BEV_OPT_CLOSE_ON_FREE);
 
-        bufferevent_setcb(bev, NULL, NULL, connect_event_cb, this);
+        if (callback == nullptr) {
+            bufferevent_setcb(bev, NULL, NULL, connect_event_cb, this);
+        } else {
+            bufferevent_setcb(bev, NULL, NULL, callback, this);
+        }
+        bufferevent_enable(bev, EV_READ);
 
         dns_base = evdns_base_new(evloop, 1);
 
@@ -109,15 +115,23 @@ public:
     }
 
     static void connect_event_cb(struct bufferevent *bev, short events, void *arg) {
+        std::cout << "event cb: " << events << std::endl;
 
-        Client<SessionType> *_this = static_cast<Client<SessionType> *>(arg);
+        if (events & BEV_EVENT_EOF) {
+            Client<SessionType> *_this = static_cast<Client<SessionType> *>(arg);
+            event_base *base = _this->evloop;
+            event_base_loopexit(base, NULL);
+        } else if (events & BEV_EVENT_ERROR) {
+        } else if (events & BEV_EVENT_TIMEOUT) {
+        } else if (events & BEV_EVENT_CONNECTED) {
+            Client<SessionType> *_this = static_cast<Client<SessionType> *>(arg);
 
-        _this->session = std::unique_ptr<SessionType>(new SessionType(bev));
+            _this->session = std::unique_ptr<SessionType>(new SessionType(bev));
 
-        _this->session->on_ready = _this->on_ready;
+            _this->session->on_ready = _this->on_ready;
 
-        _this->session->connection_made();
-
+            _this->session->connection_made();
+        }
     }
 
 };
@@ -148,7 +162,9 @@ public:
     }
 
     static void close_cb(struct bufferevent *bev, void *arg) {
+        std::cout << "close_cb outside" << std::endl;
         if (evbuffer_get_length(bufferevent_get_output(bev)) == 0) {
+            std::cout << "close_cb inside" << std::endl;
             event_base *base = static_cast<event_base *>(arg);
             event_base_loopexit(base, NULL);
         }
@@ -185,6 +201,8 @@ class SubscriberSession;
 template<typename ::TestParams *params>
 class PublisherSession;
 
+class IdleSession;
+
 TEST_F(SessionProtocol, qos0_test) {
 
     Client<PublisherSession<&qos0_params>> publisher(evloop);
@@ -220,6 +238,42 @@ TEST_F(SessionProtocol, qos2_test) {
     Client<SubscriberSession<&qos2_params>> subscriber(evloop);
 
     subscriber.on_ready = [&publisher]() { publisher.connect_to_broker(); };
+
+    subscriber.connect_to_broker();
+
+    event_base_dispatch(evloop);
+
+}
+
+static void idle_connect_callback(
+        struct bufferevent *bev, short events, void *arg) {
+    if (events & BEV_EVENT_EOF) {
+        Client<IdleSession> *_this = static_cast<Client<IdleSession> *>(arg);
+        event_base *base = _this->evloop;
+        event_base_loopexit(base, NULL);
+    }
+}
+
+TEST_F(SessionProtocol, idle_connect_timedout) {
+    Client<IdleSession> idleSession(evloop);
+    idleSession.connect_to_broker(idle_connect_callback);
+    event_base_dispatch(evloop);
+}
+
+static void close_the_connection(int fd, short event, void *arg) {
+    event_base_loopexit((event_base *)arg, NULL);
+}
+
+TEST_F(SessionProtocol, idle_connect_maintain_connection) {
+    Client<SubscriberSession<&qos1_params>> subscriber(evloop);
+
+    subscriber.on_ready = [&subscriber]() {
+        event *timer = evtimer_new(subscriber.evloop,
+                                   close_the_connection,
+                                   subscriber.evloop);
+        timeval timeout = {4, 0};
+        evtimer_add(timer, &timeout);
+    };
 
     subscriber.connect_to_broker();
 
@@ -321,4 +375,21 @@ public:
         packet_manager->send_packet(disconnect_packet);
     }
 
+};
+
+class IdleSession : public TestSession {
+public:
+    IdleSession(bufferevent *bev) : TestSession(bev) {}
+
+    void handle_connack(const ConnackPacket &connack_packet) override {
+    }
+
+    void handle_puback(const PubackPacket &puback_packet) override {
+    }
+
+    void handle_pubrec(const PubrecPacket &pubrec_packet) override {
+    }
+
+    void handle_pubcomp(const PubcompPacket &pubcomp_packet) override {
+    }
 };

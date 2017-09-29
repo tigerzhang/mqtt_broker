@@ -45,9 +45,7 @@ public:
      * @param bev               Pointer to a bufferevent internal control structure.
      * @param session_manager   Reference to the SessionManager.
      */
-    BrokerSession(struct bufferevent *bev, SessionManager &session_manager) : BaseSession(bev),
-                                                                              session_manager(session_manager) {
-    }
+    BrokerSession(struct bufferevent *bev, SessionManager &session_manager);
 
     /**
      * Handle authentication and authorization of a connecting client.
@@ -262,5 +260,7 @@ public:
      */
     SessionManager &session_manager;
 
-};
+	uint8_t protocol_level;
 
+    struct event *connect_timeout;
+};

@@ -66,6 +66,7 @@ public:
 
         SessionManager &session_manager = static_cast<Protocol *>(_this)->session_manager;
 
+        session_manager.set_event_base(evbase);
         session_manager.accept_connection(bev);
     }
 

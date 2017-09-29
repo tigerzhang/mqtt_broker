@@ -14,6 +14,10 @@ void PacketManager::receive_packet_data() {
 
     struct evbuffer *input = bufferevent_get_input(bev);
 
+    std::cout << "receive packet data: "
+              << evbuffer_get_length(input)
+              << std::endl;
+
     while (evbuffer_get_length(input) != 0) {
 
         size_t available = evbuffer_get_length(input);
@@ -144,6 +148,7 @@ void PacketManager::close_connection() {
 }
 
 void PacketManager::handle_events(short events) {
+    std::cout << "handle_events: " << events << std::endl;
 
     if (events & BEV_EVENT_EOF) {
         if (event_handler) {
